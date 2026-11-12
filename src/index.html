@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>PureMinecraft</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="glass">
+    <div class="drag-strip" data-tauri-drag-region></div>
+
+    <div class="winctl">
+      <button id="btn-close" class="ctl close" aria-label="close">
+        <svg viewBox="0 0 10 10" width="8" height="8"><path d="M1 1 L9 9 M9 1 L1 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
+      <button id="btn-min" class="ctl" aria-label="min">
+        <svg viewBox="0 0 10 10" width="8" height="8"><path d="M1 5 L9 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <header class="topbar">
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+          <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/>
+          <path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>
+        </svg>
+        <h1>PureMinecraft</h1>
+      </div>
+      <nav class="tabs" id="tabs">
+        <button class="tab on" data-tab="home">启动</button>
+        <button class="tab" data-tab="versions">版本管理</button>
+        <button class="tab" data-tab="download">资源下载</button>
+        <button class="tab" data-tab="mods">模组库</button>
+        <button class="tab" data-tab="settings">设置</button>
+      </nav>
+    </header>
+
+    <section class="body">
+      <!-- 启动 -->
+      <div class="page on" id="page-home">
+        <div class="home-grid">
+          <div class="card">
+            <div class="card-title">账户</div>
+            <label class="field">
+              <span>昵称</span>
+              <input id="nick" type="text" value="Steve" maxlength="16" />
+            </label>
+            <label class="field">
+              <span>Java 路径</span>
+              <div class="row-inline">
+                <input id="javaPath" type="text" placeholder="留空则用自带 JDK" />
+                <button class="mini" id="btnAutoJava">自动</button>
+              </div>
+            </label>
+            <label class="field">
+              <span>内存分配</span>
+              <div class="row-inline">
+                <input type="range" id="ram" min="2048" max="8192" step="512" value="4096" />
+                <b id="ramVal">4 GB</b>
+              </div>
+            </label>
+          </div>
+
+          <div class="card launch-card">
+            <div class="card-title">当前版本</div>
+            <div class="bigver" id="curVersion">未选择</div>
+            <div class="ver-sub" id="curVersionSub">在「版本管理」里选一个</div>
+            <button class="play" id="btnPlay">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              启动游戏
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 版本管理 -->
+      <div class="page" id="page-versions">
+        <div class="card grow">
+          <div class="card-title">
+            本地版本
+            <button class="mini" id="btnOpenVersions">打开目录</button>
+          </div>
+          <div class="list" id="localList"></div>
+        </div>
+      </div>
+
+      <!-- 资源下载 -->
+      <div class="page" id="page-download">
+        <div class="card grow">
+          <div class="card-title">原版版本（BMCLAPI）</div>
+          <div class="row-inline" style="padding:0 0 8px">
+            <input id="customVer" type="text" placeholder="手动输入版本号，如 1.20.1" />
+            <button class="mini" id="btnCustomInstall">安装</button>
+          </div>
+          <div class="list" id="remoteList"></div>
+        </div>
+        <div class="card fabric-card">
+          <div class="card-title">Fabric</div>
+          <label class="field"><span>Minecraft</span><input id="fabricMc" type="text" placeholder="1.20.1" /></label>
+          <label class="field"><span>Loader</span><input id="fabricLoader" type="text" placeholder="0.15.11" /></label>
+          <button class="btn" id="btnFabric">安装 Fabric</button>
+          <div class="hint-sm">原版装好后填写 loader 版本，一键装 Fabric</div>
+        </div>
+      </div>
+
+      <!-- 模组库 -->
+      <div class="page" id="page-mods">
+        <div class="card grow">
+          <div class="card-title">
+            模组资源库
+            <span class="row-dim" id="modCount">Modrinth</span>
+          </div>
+          <div class="mod-bar">
+            <input id="modQuery" type="text" placeholder="搜索模组，如 sodium / jei / 小地图" />
+            <select id="modLoader">
+              <option value="fabric" selected>Fabric</option>
+              <option value="forge">Forge</option>
+              <option value="neoforge">NeoForge</option>
+              <option value="quilt">Quilt</option>
+            </select>
+            <select id="modSort">
+              <option value="relevance">相关度</option>
+              <option value="downloads" selected>下载量</option>
+              <option value="follows">评分/关注</option>
+              <option value="newest">最新</option>
+            </select>
+            <button class="mini" id="btnModSearch">搜索</button>
+          </div>
+          <div class="mod-list" id="modList"></div>
+        </div>
+      </div>      <!-- 模组详情（二级菜单） -->
+    <section class="detail" id="detail" aria-hidden="true">
+      <header class="detail-head">
+        <button class="ctl" id="detailBack" title="返回">
+          <svg viewBox="0 0 10 10" width="9" height="9"><path d="M6 1 L2 5 L6 9" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <span class="detail-crumb">模组库 / <b id="dCrumb">详情</b></span>
+      </header>
+
+      <div class="detail-hero">
+        <img class="detail-icon" id="dIcon" alt="" />
+        <div class="detail-meta">
+          <h2 id="dTitle">—</h2>
+          <div class="detail-author" id="dAuthor">—</div>
+          <div class="detail-stats" id="dStats"></div>
+        </div>
+        <button class="btn" id="dInstall">安装</button>
+      </div>
+
+      <nav class="detail-tabs" id="detailTabs">
+        <button class="dtab on" data-tab="desc">简介</button>
+        <button class="dtab" data-tab="gallery">图集</button>
+        <button class="dtab" data-tab="video">宣传视频</button>
+        <button class="dtab" data-tab="comments">评论</button>
+      </nav>
+
+      <div class="detail-body">
+        <div class="dpage on" id="dp-desc"><div class="md" id="dBody">加载中…</div></div>
+        <div class="dpage" id="dp-gallery"><div class="gallery" id="dGallery"></div></div>
+        <div class="dpage" id="dp-video"><div class="video" id="dVideo"></div></div>
+        <div class="dpage" id="dp-comments"><div class="comments" id="dComments"></div></div>
+      </div>
+    </section>
+    <!-- 设置 -->
+      <div class="page" id="page-settings">
+        <div class="card grow">
+          <div class="card-title">外观与镜像</div>
+          <div class="row">
+            <span class="row-label">主题</span>
+            <div class="seg" id="themeSeg">
+              <button data-theme="dark" class="active">暗黑</button>
+              <button data-theme="light">纯白</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="row-label">语言 / Language</span>
+            <div class="seg" id="langSeg">
+              <button data-lang="zh-CN" class="active">中文</button>
+              <button data-lang="en">English</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="row-label">窗口置顶</span>
+            <button class="switch" id="swTop" role="switch" aria-checked="false"><i></i></button>
+          </div>
+          <div class="row">
+            <span class="row-label">游戏内语言</span>
+            <div class="seg" id="gameLangSeg">
+              <button data-lang="zh_cn" class="active">简体中文</button>
+              <button data-lang="en_us">English</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="row-label">镜像源</span>
+            <span class="row-dim">BMCLAPI（自动回退 Mojang 官方）</span>
+          </div>
+          <div class="row">
+            <span class="row-label">Java</span>
+            <span class="row-dim" id="javaState">检查中…</span>
+          </div>
+          <div class="row">
+            <span class="row-label">游戏目录</span>
+            <span class="row-dim" id="gameDirState">—</span>
+          </div>
+          <div class="row danger">
+            <button class="danger-btn" id="btnUninstall">卸载 PureMinecraft</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 卸载确认 -->
+    <div class="modal" id="uninstModal" aria-hidden="true">
+      <div class="modal-card">
+        <h3>卸载 PureMinecraft</h3>
+        <div class="modal-body">
+          <div id="savesSummary" class="saves-summary">正在统计存档…</div>
+          <label class="opt-line">
+            <input type="radio" name="uninst" value="keep" checked />
+            <span><b>只卸载程序</b><br><span class="opt-sub">保留 .minecraft（存档、模组、版本、资源）</span></span>
+          </label>
+          <label class="opt-line">
+            <input type="radio" name="uninst" value="purge" />
+            <span><b>连存档一起删除</b><br><span class="opt-sub">删掉 .minecraft 整个目录，存档无法恢复</span></span>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button class="btn ghost" id="uninstCancel">取消</button>
+          <button class="btn" id="uninstOk">确认卸载</button>
+        </div>
+      </div>
+    </div>
+    <!-- 缺少 Java -->
+    <div class="modal" id="javaModal" aria-hidden="true">
+      <div class="modal-card">
+        <h3>未检测到运行环境</h3>
+        <div class="modal-body">
+          本目录下没有找到 Java（runtime\bin\javaw.exe），系统 PATH 里也没有。<br><br>
+          是否立即为您自动下载？（OpenJDK 17，约 178 MB，下到启动器目录的 runtime\ 下）
+        </div>
+        <div class="modal-actions">
+          <button class="btn ghost" id="javaCancel">取消</button>
+          <button class="btn" id="javaDownload">立即下载</button>
+        </div>
+      </div>
+    </div>
+    <!-- 进度 -->
+    <section class="progress" id="progress" hidden>
+      <div class="p-top"><span id="pPhase">下载中</span><span id="pCount">0 / 0</span></div>
+      <div class="track"><div class="fill" id="pFill"></div></div>
+      <div class="p-bottom"><span id="pFile">—</span><span id="pFailed"></span></div>
+    </section>
+
+    <!-- 日志 -->
+    <footer class="logbar">
+      <div class="log-head"><span>运行日志</span><button class="mini ghost" id="btnClearLog">清空</button></div>
+      <div class="log" id="log"></div>
+    </footer>
+  </main>
+  <script src="main.js"></script>
+</body>
+</html>
