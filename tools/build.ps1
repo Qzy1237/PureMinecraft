@@ -22,7 +22,9 @@ $DistDir  = Join-Path $Root 'dist'
 $TauriDir = Join-Path $Root 'src-tauri'
 
 $AppName = 'PureMinecraft'
-$AppVer  = '1.0.0'
+# 版本号唯一来源：src-tauri\Cargo.toml
+$AppVer = (Select-String -Path (Join-Path $PSScriptRoot '..\src-tauri\Cargo.toml') -Pattern '^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+if (-not $AppVer) { $AppVer = '0.0.0' }
 $LangTag = ''
 
 Write-Host "=== 构建 $AppName ===" -ForegroundColor Cyan

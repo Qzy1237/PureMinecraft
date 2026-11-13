@@ -2302,7 +2302,7 @@ dependencies = [
 
 [[package]]
 name = "pureminecraft"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "md5",
  "serde",

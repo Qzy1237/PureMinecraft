@@ -255,3 +255,81 @@ Java 查找顺序（find_java）：
   · 构建脚本里 E:\ 的工具链路径只是"优先尝试"，别的机器会自动退回 PATH
   · localStorage 按 app id 共享，同一台机器上放多份便携版会共用设置（不影响换电脑）
 ================================================================
+================================================================
+十四、v1.1.0 崩溃智能分析
+================================================================
+【一、本地规则引擎（默认开启，全程不联网）】
+
+  游戏进程由独立线程 wait()，退出码非 0 时向前端发 game-exit 事件，
+  前端收到后调用 analyze_crash 读崩溃报告。
+
+  报告查找顺序：
+    1. .minecraft\crash-reports 里最新的 .txt
+    2. 没有就退回 .minecraft\logs\latest.log
+
+  内置规则（crash.rs，按优先级）：
+
+    out_of_memory   OutOfMemoryError / Java heap space / GC overhead
+                    → 内存不足，建议在启动器设置中调大内存分配。
+    java_too_old    UnsupportedClassVersionError / compiled by a more recent
+                    → Java 版本过低，请更换高版本 Java。
+    missing_class   ClassNotFoundException / NoClassDefFoundError / NoSuchMethodError
+                    → 缺少前置模组或版本不兼容，请检查。
+    mod_conflict    Incompatible mods found / Mod resolution failed / requires any version of
+                    → 模组之间版本冲突或缺少依赖。
+    graphics        GLFW error / Failed to create window / OpenGL / Pixel format not accelerated
+                    → 显卡驱动过旧或不被支持。
+    file_lock       being used by another process
+                    → 游戏文件被占用。
+
+  命中规则直接弹中文提示，不调用任何 AI。
+
+【二、云端 AI 分析（可选）】
+
+  设置页 → 崩溃分析 API Key / API 地址 / 模型
+  默认地址 https://api.deepseek.com/chat/completions，默认模型 deepseek-chat
+
+  触发条件（三个同时满足）：
+    1. 用户填了 Key
+    2. 本地规则没有命中
+    3. 用户主动点【使用 AI 深度分析】
+
+  发送内容：崩溃日志最后 50 行，最多 6000 字符
+  请求方式：tauri::async_runtime::spawn_blocking + WinHTTP POST
+            → 网络请求在阻塞线程池，UI 线程不参与
+
+【三、隐私红线】
+
+  · 没有 Key：ai_analyze 里第一行就 return，不发任何请求
+                （前端也不会显示 AI 按钮）
+  · 有 Key 但用户没点按钮：同样不发
+  · 只上传最后 50 行，不上传整个日志，不上传存档
+  · Key 保存在 config\ai.json，只在本机
+  · 所有路径来自 game_root()，不写死盘符
+
+【四、实测记录（2026-11-13）】
+
+  单元测试 5 个全过：
+      cargo test --release
+      test crash::tests::rule_oom ... ok
+      test crash::tests::rule_class_not_found ... ok
+      test crash::tests::rule_java_version ... ok
+      test crash::tests::rule_none ... ok
+      test crash::tests::tail_keeps_last_lines ... ok
+
+  端到端（真启动游戏 → 强杀 → 非 0 退出）：
+      ✔ OutOfMemoryError 报告 → 弹「内存不足，建议在启动器设置中调大内存分配。」
+      ✔ UnsupportedClassVersionError → 弹「Java 版本过低，请更换高版本 Java。」
+      ✔ 未知异常（NullPointerException）→ 弹「本地规则库没有识别出明确原因」
+        且**不显示** AI 按钮（因为没配 Key）
+      ✔ 配置假 Key 后 → AI 按钮出现
+      ✔ 点 AI 按钮 → DeepSeek 返回 401（假 Key），
+        错误信息正确显示，1 秒内界面已响应、未卡死
+
+  修过的坑：
+      · 配置文件带 UTF-8 BOM 导致 serde_json 解析失败 →
+        ai_config_get 里 trim_start_matches('\u{feff}')
+      · open() 只支持 GET，POST 需要拆出 open_verb(url, method)
+      · WinHttpSendRequest 的 headers_len 要传 u32::MAX（-1 表示 null 结尾）
+
+================================================================

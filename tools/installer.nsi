@@ -5,7 +5,7 @@ Unicode true
 !include "FileFunc.nsh"
 
 !define APP_NAME      "PureMinecraft"
-!define APP_VER       "1.0.0"
+!define APP_VER       "1.1.0"
 !define APP_PUBLISHER "PureStat Lab"
 !define APP_KEY       "Software\Microsoft\Windows\CurrentVersion\Uninstall\PureMinecraft"
 
@@ -20,7 +20,7 @@ RequestExecutionLevel user
 SetCompressor /SOLID lzma
 SetCompressorDictSize 32
 
-VIProductVersion "1.0.0.0"
+VIProductVersion "1.1.0.0"
 VIAddVersionKey /LANG=2052 "ProductName"     "${APP_NAME}"
 VIAddVersionKey /LANG=2052 "FileDescription" "${APP_NAME} 安装程序"
 VIAddVersionKey /LANG=2052 "FileVersion"     "${APP_VER}.0"

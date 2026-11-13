@@ -9,6 +9,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde_json::{json, Value};
+use tauri::Emitter;
+
+mod crash;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::fs;
@@ -21,7 +24,7 @@ use std::sync::{Arc, Mutex};
 const BMCL: &str = "https://bmclapi2.bangbang93.com";
 const MOJANG: &str = "https://launchermeta.mojang.com";
 /// 启动器自身的根目录（bin\ 的上一级；不在 bin 下就取 exe 所在目录）
-fn base_dir() -> PathBuf {
+pub(crate) fn base_dir() -> PathBuf {
     let mut p = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("."));
     p.pop(); // 去掉 exe 文件名
     if p.file_name().map(|n| n.eq_ignore_ascii_case("bin")).unwrap_or(false) {
@@ -34,7 +37,7 @@ fn base_dir() -> PathBuf {
 
 // ---------------------------------------------------------------- 路径
 
-fn game_root() -> PathBuf {
+pub(crate) fn game_root() -> PathBuf {
     base_dir().join(".minecraft")
 }
 fn versions_dir() -> PathBuf {
@@ -104,7 +107,7 @@ fn split_url(url: &str) -> Option<(String, String, u16, bool)> {
     Some((host, path.to_string(), port, https))
 }
 
-unsafe fn open(url: &str) -> Option<(HInternet, HInternet)> {
+unsafe fn open_verb(url: &str, method: &str) -> Option<(HInternet, HInternet)> {
     let (host, path, port, https) = split_url(url)?;
     let agent = wide("PureMinecraft/1.0");
     let session = WinHttpOpen(agent.as_ptr(), 0, std::ptr::null(), std::ptr::null(), 0);
@@ -121,7 +124,7 @@ unsafe fn open(url: &str) -> Option<(HInternet, HInternet)> {
         WinHttpCloseHandle(session);
         return None;
     }
-    let verb = wide("GET");
+    let verb = wide(method);
     let path_w = wide(&path);
     let flags: u32 = if https { 0x0080_0000 } else { 0 };
     let req = WinHttpOpenRequest(connect, verb.as_ptr(), path_w.as_ptr(),
@@ -136,7 +139,7 @@ unsafe fn open(url: &str) -> Option<(HInternet, HInternet)> {
 
 fn http_text(url: &str) -> Option<String> {
     unsafe {
-        let (req, connect) = open(url)?;
+        let (req, connect) = open_verb(url, "GET")?;
         if WinHttpSendRequest(req, std::ptr::null(), 0, std::ptr::null_mut(), 0, 0, 0) == 0
             || WinHttpReceiveResponse(req, std::ptr::null_mut()) == 0
         {
@@ -178,7 +181,7 @@ fn http_text(url: &str) -> Option<String> {
 /// 下载到文件，返回字节数；失败返回 None
 fn http_file(url: &str, dst: &Path) -> Option<u64> {
     unsafe {
-        let (req, connect) = open(url)?;
+        let (req, connect) = open_verb(url, "GET")?;
         if WinHttpSendRequest(req, std::ptr::null(), 0, std::ptr::null_mut(), 0, 0, 0) == 0
             || WinHttpReceiveResponse(req, std::ptr::null_mut()) == 0
         {
@@ -683,9 +686,9 @@ fn install_fabric_blocking(mc: &str, loader: &str) -> Result<(), String> {
 // ---------------------------------------------------------------- 启动
 
 #[tauri::command]
-fn launch(id: String, name: String, ram_mb: u32, java_path: String, lang: Option<String>) -> String {
+fn launch(app: tauri::AppHandle, id: String, name: String, ram_mb: u32, java_path: String, lang: Option<String>) -> String {
     let lang = lang.unwrap_or_else(|| "zh_cn".to_string());
-    match launch_blocking(&id, &name, ram_mb, &java_path, &lang) {
+    match launch_blocking(Some(app), &id, &name, ram_mb, &java_path, &lang) {
         Ok(cmd) => {
             let mut p = PROG.lock().unwrap();
             p.phase = "launched".into();
@@ -705,7 +708,7 @@ fn launch(id: String, name: String, ram_mb: u32, java_path: String, lang: Option
     }
 }
 
-fn launch_blocking(id: &str, name: &str, ram_mb: u32, java_path: &str, lang: &str) -> Result<String, String> {
+fn launch_blocking(app: Option<tauri::AppHandle>, id: &str, name: &str, ram_mb: u32, java_path: &str, lang: &str) -> Result<String, String> {
     let vdir = versions_dir().join(id);
     let vjson = vdir.join(format!("{}.json", id));
     let text = fs::read_to_string(&vjson).map_err(|_| "找不到版本 JSON".to_string())?;
@@ -856,13 +859,27 @@ fn launch_blocking(id: &str, name: &str, ram_mb: u32, java_path: &str, lang: &st
     // 启动前把游戏语言写进 options.txt
     set_game_language(&game_dir, lang);
 
-    let child = Command::new(&java)
+    let mut child = Command::new(&java)
         .args(&args)
         .current_dir(&game_dir)
         .spawn()
         .map_err(|e| format!("启动失败: {}", e))?;
 
-    Ok(format!("已启动 pid={} · {} · {}MB", child.id(), id, ram_mb))
+    let pid = child.id();
+
+    // 独立线程等游戏退出，绝不阻塞 UI 线程
+    if let Some(app) = app {
+        std::thread::spawn(move || {
+            let code = match child.wait() {
+                Ok(status) => status.code().unwrap_or(-1),
+                Err(_) => -1,
+            };
+            // code == 0 正常退出；非 0 才需要分析
+            let _ = app.emit("game-exit", code);
+        });
+    }
+
+    Ok(format!("已启动 pid={} · {} · {}MB", pid, id, ram_mb))
 }
 
 /// 修改 options.txt 里的 lang 行（不存在则创建）
@@ -1256,7 +1273,7 @@ fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             get_manifest, list_local, install_version, install_fabric, launch,
-            read_progress, tool_status, open_dir, uninstall_app, read_lang, set_always_on_top, search_mods, install_mod, list_mods, download_java, mod_detail, mod_versions, open_url, saves_info
+            read_progress, tool_status, open_dir, uninstall_app, read_lang, set_always_on_top, search_mods, install_mod, list_mods, download_java, mod_detail, mod_versions, open_url, saves_info, crash::analyze_crash, crash::ai_analyze, crash::ai_config_get, crash::ai_config_set, crash::open_crash_dir
         ])
         .setup(|app| {
             #[cfg(target_os = "windows")]
@@ -1277,3 +1294,61 @@ fn main() {
 
 #[allow(dead_code)]
 fn _unused(_h: HashMap<String, String>) {}
+
+/// POST JSON（用于 AI 接口）。返回 (状态码, 响应体)
+pub(crate) fn http_post_json(url: &str, auth_bearer: &str, body: &str) -> Option<(u16, String)> {
+    unsafe {
+        let (req, connect) = open_verb(url, "POST")?;
+
+        let mut headers = String::from("Content-Type: application/json\r\n");
+        if !auth_bearer.is_empty() {
+            headers.push_str(&format!("Authorization: Bearer {}\r\n", auth_bearer));
+        }
+        let headers_w = wide(&headers);
+
+        let body_bytes = body.as_bytes();
+        // headers_len = -1 表示以 null 结尾
+        let ok = WinHttpSendRequest(
+            req,
+            headers_w.as_ptr(),
+            u32::MAX,
+            body_bytes.as_ptr() as *mut c_void,
+            body_bytes.len() as u32,
+            body_bytes.len() as u32,
+            0,
+        ) != 0
+            && WinHttpReceiveResponse(req, std::ptr::null_mut()) != 0;
+
+        if !ok {
+            WinHttpCloseHandle(req);
+            WinHttpCloseHandle(connect);
+            return None;
+        }
+
+        let mut status = [0u32; 1];
+        let mut len: u32 = 4;
+        let mut idx: u32 = 0;
+        WinHttpQueryHeaders(req, Q_STATUS, std::ptr::null(),
+                            status.as_mut_ptr() as *mut c_void, &mut len, &mut idx);
+
+        let mut out: Vec<u8> = Vec::new();
+        let mut buf = vec![0u8; 65536];
+        loop {
+            let mut avail: u32 = 0;
+            if WinHttpQueryDataAvailable(req, &mut avail) == 0 || avail == 0 {
+                break;
+            }
+            let mut read: u32 = 0;
+            if WinHttpReadData(req, buf.as_mut_ptr() as *mut c_void, avail, &mut read) == 0 || read == 0 {
+                break;
+            }
+            out.extend_from_slice(&buf[..read as usize]);
+            if out.len() > 4 * 1024 * 1024 {
+                break;
+            }
+        }
+        WinHttpCloseHandle(req);
+        WinHttpCloseHandle(connect);
+        Some((status[0] as u16, String::from_utf8_lossy(&out).to_string()))
+    }
+}

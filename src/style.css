@@ -376,3 +376,37 @@ body.light .logbar { background: rgba(255,255,255,0.55); }
 .opt-line input { margin-top: 3px; accent-color: var(--accent); }
 .opt-line b { font-weight: 500; }
 .opt-sub { color: var(--faint); font-size: 11px; }
+/* ---------------- 崩溃分析 ---------------- */
+.row-input {
+  flex: 1 1 auto; min-width: 120px; height: 30px; padding: 0 10px;
+  border: none; border-radius: 8px; font-family: inherit; font-size: 12px;
+  color: var(--text); background: rgba(255,255,255,0.07);
+  box-shadow: inset 0 0 0 1px var(--line); outline: none;
+}
+.row-input:focus { box-shadow: inset 0 0 0 1px var(--accent); }
+.btn.small { height: 28px; padding: 0 14px; font-size: 12px; }
+
+.crash-card { max-width: 640px; width: 76%; }
+.crash-head { display: flex; align-items: center; gap: 10px; }
+.crash-badge {
+  font-size: 10.5px; padding: 3px 8px; border-radius: 6px;
+  background: rgba(255,90,120,0.18); color: #FF9AB0;
+  box-shadow: inset 0 0 0 1px rgba(255,90,120,0.35);
+}
+.crash-hint {
+  font-size: 13px; line-height: 1.8; color: var(--text);
+  padding: 12px 14px; border-radius: 12px;
+  background: rgba(255,255,255,0.05); box-shadow: inset 0 0 0 1px var(--line);
+  white-space: pre-wrap;
+}
+.crash-hint.hit { background: rgba(120,255,170,0.08); box-shadow: inset 0 0 0 1px rgba(120,255,170,0.30); }
+.crash-hint.miss { background: rgba(255,200,90,0.08); box-shadow: inset 0 0 0 1px rgba(255,200,90,0.30); }
+.crash-file { margin-top: 8px; font-size: 10.5px; color: var(--faint); word-break: break-all; }
+.crash-ai { margin-top: 10px; padding: 12px 14px; border-radius: 12px; background: rgba(90,160,255,0.10); }
+.crash-ai-title { font-size: 12.5px; color: var(--text); margin-bottom: 4px; }
+.crash-ai-sub { font-size: 11.5px; color: var(--faint); line-height: 1.7; }
+.crash-ai-result {
+  margin-top: 10px; padding: 12px 14px; border-radius: 12px; max-height: 40vh; overflow: auto;
+  font-size: 12px; line-height: 1.8; color: var(--dim); white-space: pre-wrap;
+  background: rgba(0,0,0,0.30); box-shadow: inset 0 0 0 1px var(--line);
+}

@@ -202,6 +202,23 @@
             <span class="row-label">游戏目录</span>
             <span class="row-dim" id="gameDirState">—</span>
           </div>
+          <div class="row">
+            <span class="row-label">崩溃分析 API Key</span>
+            <input class="row-input" id="aiKey" type="password" placeholder="留空＝纯本地，绝不联网" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="row">
+            <span class="row-label">API 地址</span>
+            <input class="row-input" id="aiUrl" placeholder="https://api.deepseek.com/chat/completions" spellcheck="false" />
+          </div>
+          <div class="row">
+            <span class="row-label">模型</span>
+            <input class="row-input" id="aiModel" placeholder="deepseek-chat" spellcheck="false" />
+          </div>
+          <div class="row">
+            <span class="row-label">AI 分析</span>
+            <button class="btn ghost small" id="aiSave">保存设置</button>
+            <span class="row-dim" id="aiState">未配置（纯本地模式）</span>
+          </div>
           <div class="row danger">
             <button class="danger-btn" id="btnUninstall">卸载 PureMinecraft</button>
           </div>
@@ -209,6 +226,29 @@
       </div>
     </section>
 
+    <!-- 崩溃分析 -->
+    <div class="modal" id="crashModal" aria-hidden="true">
+      <div class="modal-card crash-card">
+        <div class="crash-head">
+          <span class="crash-badge" id="crashBadge">崩溃分析</span>
+          <h3 id="crashTitle">游戏异常退出</h3>
+        </div>
+        <div class="modal-body">
+          <div id="crashHint" class="crash-hint">正在读取崩溃报告…</div>
+          <div id="crashFile" class="crash-file"></div>
+          <div id="crashAiBox" class="crash-ai" hidden>
+            <div class="crash-ai-title">本地规则没有识别出原因</div>
+            <div class="crash-ai-sub">可以把你这次的崩溃日志最后 50 行发给 AI 深度分析（需要先填 API Key）。</div>
+          </div>
+          <pre id="crashAiResult" class="crash-ai-result" hidden></pre>
+        </div>
+        <div class="modal-actions">
+          <button class="btn ghost" id="crashOpenLog">打开日志目录</button>
+          <button class="btn ghost" id="crashClose">关闭</button>
+          <button class="btn" id="crashAi" hidden>使用 AI 深度分析</button>
+        </div>
+      </div>
+    </div>
     <!-- 卸载确认 -->
     <div class="modal" id="uninstModal" aria-hidden="true">
       <div class="modal-card">

@@ -527,6 +527,135 @@
 
   $('btnClearLog').addEventListener('click', () => { $('log').innerHTML = ''; });
 
+  // ---------------------------------------------------------------- 崩溃分析
+  let lastCrash = null;
+
+  const CRASH_FRIENDLY = {
+    out_of_memory: '内存不足，建议在启动器设置中调大内存分配。',
+    java_too_old: 'Java 版本过低，请更换高版本 Java。',
+    missing_class: '缺少前置模组或版本不兼容，请检查。',
+    mod_conflict: '模组之间版本冲突或缺少依赖，请检查 mods 文件夹。',
+    graphics: '显卡驱动过旧或不被支持，请更新显卡驱动。',
+    file_lock: '游戏文件被占用，请关闭另一个 Minecraft 后重试。'
+  };
+
+  async function showCrashAnalysis(exitCode) {
+    if (!invoke) return;
+    $('crashModal').classList.add('open');
+    $('crashModal').setAttribute('aria-hidden', 'false');
+    $('crashTitle').textContent = `游戏异常退出（Exit Code ${exitCode}）`;
+    $('crashHint').className = 'crash-hint';
+    $('crashHint').textContent = '正在读取崩溃报告…';
+    $('crashFile').textContent = '';
+    $('crashAiBox').hidden = true;
+    $('crashAi').hidden = true;
+    $('crashAiResult').hidden = true;
+    $('crashAiResult').textContent = '';
+
+    let r;
+    try {
+      r = await invoke('analyze_crash');
+    } catch (e) {
+      $('crashHint').textContent = '读取崩溃报告失败：' + e;
+      return;
+    }
+    lastCrash = r;
+
+    if (!r.found) {
+      $('crashHint').className = 'crash-hint miss';
+      $('crashHint').textContent =
+        '没有找到崩溃报告文件。\n' +
+        '可能游戏还没到写日志的阶段就退出了，建议直接看 logs 目录。';
+    } else if (r.matched && r.matched.length) {
+      const first = r.matched[0];
+      $('crashHint').className = 'crash-hint hit';
+      $('crashHint').textContent = CRASH_FRIENDLY[first.id] || first.advice || first.title;
+      if (r.matched.length > 1) {
+        $('crashHint').textContent += '\n\n同时匹配到：' + r.matched.slice(1).map(m => m.title).join('、');
+      }
+    } else {
+      $('crashHint').className = 'crash-hint miss';
+      $('crashHint').textContent =
+        '本地规则库没有识别出明确原因。\n可以点下面的「使用 AI 深度分析」，或者打开日志目录自己看看。';
+    }
+
+    if (r.found) {
+      $('crashFile').textContent = `日志：${r.file}（${r.line_count} 行）`;
+    }
+
+    // 只有「有 Key」且「本地没命中」才显示 AI 按钮
+    try {
+      const cfg = await invoke('ai_config_get');
+      if (cfg.has_key && r.found && !(r.matched && r.matched.length)) {
+        $('crashAiBox').hidden = false;
+        $('crashAi').hidden = false;
+      }
+    } catch (_) { /* 没配置就什么都不做 */ }
+  }
+
+  $('crashClose').addEventListener('click', () => {
+    $('crashModal').classList.remove('open');
+    $('crashModal').setAttribute('aria-hidden', 'true');
+  });
+
+  $('crashOpenLog').addEventListener('click', async () => {
+    if (invoke) await invoke('open_crash_dir');
+  });
+
+  $('crashAi').addEventListener('click', async () => {
+    if (!invoke || !lastCrash) return;
+    const cfg = await invoke('ai_config_get');
+    if (!cfg.has_key) { log('还没配置 API Key', 'err'); return; }
+
+    $('crashAi').disabled = true;
+    $('crashAi').textContent = '分析中…';
+    $('crashAiResult').hidden = false;
+    $('crashAiResult').textContent = '正在请求 AI，请稍候（不会阻塞界面）…';
+    log('调用 AI 分析崩溃日志（仅发送最后 50 行）');
+
+    try {
+      const text = await invoke('ai_analyze', {
+        apiKey: cfg.key,
+        apiUrl: cfg.url,
+        logTail: lastCrash.tail || '',
+        model: cfg.model || 'deepseek-chat'
+      });
+      $('crashAiResult').textContent = text;
+      log('AI 分析完成', 'ok');
+    } catch (e) {
+      $('crashAiResult').textContent = '分析失败：' + e;
+      log('AI 分析失败：' + e, 'err');
+    }
+    $('crashAi').disabled = false;
+    $('crashAi').textContent = '使用 AI 深度分析';
+  });
+
+  // ---------------------------------------------------------------- AI 配置
+  async function loadAiConfig() {
+    if (!invoke) return;
+    try {
+      const c = await invoke('ai_config_get');
+      $('aiKey').value = c.key || '';
+      $('aiUrl').value = c.url || 'https://api.deepseek.com/chat/completions';
+      $('aiModel').value = c.model || 'deepseek-chat';
+      $('aiState').textContent = c.has_key ? '已配置（本地规则未命中时可调用）' : '未配置（纯本地模式）';
+      $('aiState').style.color = c.has_key ? '' : '';
+    } catch (e) { /* 忽略 */ }
+  }
+
+  $('aiSave').addEventListener('click', async () => {
+    if (!invoke) return;
+    const key = $('aiKey').value.trim();
+    const url = $('aiUrl').value.trim() || 'https://api.deepseek.com/chat/completions';
+    const model = $('aiModel').value.trim() || 'deepseek-chat';
+    const ok = await invoke('ai_config_set', { key, url, model });
+    if (ok) {
+      $('aiState').textContent = key ? '已配置（本地规则未命中时可调用）' : '未配置（纯本地模式）';
+      log(key ? 'AI 配置已保存' : '已清空 API Key，回到纯本地模式', 'ok');
+    } else {
+      log('保存失败', 'err');
+    }
+  });
   // ---------------------------------------------------------------- 卸载
   const fmtBytes = n => n >= 1073741824 ? (n / 1073741824).toFixed(2) + ' GB'
                        : n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB'
@@ -609,9 +738,19 @@
       }
     } catch (e) {}
     await loadLocal();
+    await loadAiConfig();
     selectedVersion = localStorage.getItem('pcmc.version') || selectedVersion;
     renderCurrent();
     log('PureMinecraft 就绪');
+
+    // 监听游戏退出：非 0 才弹崩溃分析
+    if (tauriWin && tauriWin.listen) {
+      await tauriWin.listen('game-exit', (ev) => {
+        const code = ev.payload;
+        log('游戏已退出，Exit Code ' + code, code === 0 ? 'ok' : 'err');
+        if (code !== 0) showCrashAnalysis(code);
+      });
+    }
   }
   init();
 })();
